@@ -1,7 +1,4 @@
 var socket = io.connect()
-// var socket = new io.Socket();
-// socket.connect('http://192.168.0.105:1337');
-// var socket = io(window.location.origin); 
 /* global constants */
 var canvas = document.getElementById('canvas');
 var ctx = canvas.getContext('2d');
