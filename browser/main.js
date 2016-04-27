@@ -225,12 +225,6 @@ document.body.onkeypress = function(e) {
             socket.emit("pauseGame")
         }
     }
-    if(e.keyCode == 114) {
-        if(copterGame.gameState != "play") {
-            socket.emit('gameOver')
-            copterGame.setup();
-        }
-    }
 }
 
 /* PLAYER INPUT/SOCKET EVENTS */
