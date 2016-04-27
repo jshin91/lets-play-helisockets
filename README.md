@@ -7,3 +7,5 @@ A host must connect to the game by visiting http://letsplayhelisockets.herokuapp
 To start the game, the host must press 'start game' on his/her web browser.
 
 If at any point, more than half of the connected players are clicking the button on their mobile phone, the helicopter will ascend. Otherwise, the helicopter will descend.
+
+Watch a demo of the game here: http://www.fullstackacademy.com/hackathon-presentations/lets-play-helisockets.
