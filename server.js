@@ -58,7 +58,7 @@ io.on('connection', function(socket){
 
   socket.on('startGame', function(data) {
     host = socket.id
-    io.to(host).emit('startGameEverywhere' , host)
+    io.to(host).emit('startGameEverywhere')
     isGameRunning = true;
     socketInterval = setInterval(calculateMajority, 1000/2)
   })
