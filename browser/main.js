@@ -1,268 +1,284 @@
-var socket = io.connect()
-/* global constants */
-var canvas = document.getElementById('canvas');
-var ctx = canvas.getContext('2d');
-var mouseDown = 0;
-var font = "18px Anton"
+var socket = io.connect();
 
-var textColor = "rgb(255,5,5)";
-var smokeColor = "rgb(209,209,209)";
+var gameUtils = {
+    canvas: {
+        height: 350,
+        width: 702,
+        backgroundSrc: "clouds.jpeg",
+        copterSrc: "chopper.png"
+    },
+    font: "18px Anton",
+    textColor: "rgb(255,5,5)",
+    smokeColor: "rgb(209,209,209)"
+};
 
-var initialAscentRate = 2.4;
-var initialDescentRate = .02; // in pixels per frame
-var gravity = .02  // how quickly the descent rate increases
-var liftFactor = 1; // how quickly the climb rate increases
-var terminalVelocity = 10; // descent and ascent rate will never exceed this
+var copterGame = {
+    speedSettings: {
+        initialAscentRate: 2.4,
+        initialDescentRate: .02,
+        gravity: .02, 
+        climbRate: 1, 
+        terminalVelocity: 10, // max speed
+    },
+    obstacles: {
+        velocity: 4,
+        separation: 80,
+        height: 30,
+        width: 25,
+        color: "rgb(255,5,5)"
 
-var brickV = 4; // brick velocity
-var brickInterval = 80; // difficulty level 
-var brickHeight = 30;
-var brickWidth = 25;
-var brickColor = "rgb(255,5,5)";
+    },
+    copterSettings: {
+        height: 26,
+        width: 77,
+    },
+    gameData: {
+        copter: {
+            x: null,
+            y: null, 
+            ascentRate: null,
+            descentRate: null,
+            smokeList: []
+        },
+        obstacles: {
+            count: null,
+            obstacleList: [],
+        },
+        background: {
+            scrollVal: null,
+            velocity: 2
+        },
+        score: 0,
+    },
+    background: null,
+    copter: null,
+    gameState: "stop", //3 possible states: stop, play, pause
+    canvas: document.getElementById('canvas'),
+    drawContext: this.canvas.getContext('2d'),
+    mouseDown: false,
 
-var chopperHeight = 26;
-var chopperWidth = 77;
-var chopper = new Image();
-chopper.src = "chopper.png"
+    resetMouseDown: function() {
+        copterGame.mouseDown = false;
+    },
+    setup: function() {
+        this.gameState = "stop";
+        this.background = new Image();
+        this.background.src = gameUtils.canvas.backgroundSrc;
+        this.copter = new Image();
+        this.copter.src = gameUtils.canvas.copterSrc;
+        this.gameData.copter.x = 100;
+        this.gameData.copter.y = 175;
+        this.gameData.copter.ascentRate = this.speedSettings.initialAscentRate;
+        this.gameData.copter.descentRate = this.speedSettings.initialDescentRate;
+        this.gameData.copter.smokeList = new Array();
+        this.gameData.obstacles.count = 0;
+        this.gameData.obstacles.obstacleList = new Array();
+        this.gameData.background.scrollVal = 0;
 
-var backgroundHeight = 350;
-var backgroundWidth = 702;
-var backgroundV = 2; // background scroll velocity
-var background = new Image();
-background.src = "clouds.jpeg"
+        this.drawContext.drawImage(this.background, 0, 0, 700, 350);
+        this.drawContext.drawImage(this.copter, this.gameData.copter.x, this.gameData.copter.y, this.copterSettings.width, this.copterSettings.height);   
+        this.drawContext.fillStyle = gameUtils.textColor;
+        this.drawContext.font = gameUtils.font;
+        this.drawContext.fillText('Press spacebar to play/pause', 10, 340)
 
-
-/* variables that will be reset every time setup is called: */
-var chopperX;
-var chopperY;
-var iterationCount;
-var brickList;
-var smokeList;
-var gameState = "stop";
-var score;
-var scrollVal;
-
-var ascentRate;
-var descentRate;
-var host;
-
-window.onload = function () { setup(); }
-
-function setup() {
-    gameState = "stop";
-    clearScreen();
-    
-    chopper.src = "chopper.png";
-
-    brickList = new Array();
-    smokeList = new Array();
-
-    chopperX = 100;
-    chopperY = 175;
-
-    descentRate = initialDescentRate;
-    ascentRate = initialAscentRate;
-    
-    iterationCount = 0;
-    score = 0;
-
-    scrollVal = 0;
-
-    ctx.font = font;
-
-    addBrick();
-
-    ctx.drawImage(background, 0, 0, backgroundWidth, backgroundHeight);
-    ctx.drawImage(chopper, chopperX, chopperY, chopperWidth, chopperHeight);
-
-    ctx.fillStyle = textColor;
-    ctx.fillText('Press spacebar to play/pause', 10, 340);
-}
-
-function play() {
-    if(gameState == "pause" || gameState == "stop") {
-        intervalId = window.requestAnimationFrame(draw, canvas); 
-        gameState = "play";
-    }
-}
-
-function pause() { 
-    if(gameState == "play") {
-        gameState = "pause";
-        socket.emit('gameStopped')
-    }
-}
-
-function stop() {
-    gameState = "stop"
-    socket.emit('gameStopped')
-}
-
-function draw() {
-    if(gameState == "play") {
-        clearScreen();
-        animateBackground();
-        animateChopper();
-        animateBricks();
-        ctx.font = font;
-        ctx.fillStyle = textColor;
-        ctx.fillText('Press spacebar to play/pause', 10, 340);
-        ctx.fillText('Score:'+ score, 600, 340);
-        
-        collisionCheck();
-        
-        window.requestAnimationFrame(draw, canvas);
-    }
-}
-
-function animateChopper() {
-    if(mouseDown) {
-        descentRate = initialDescentRate;
-        chopperY = chopperY - ascentRate;
-
-        if(!(ascentRate > terminalVelocity)) {
-            ascentRate += liftFactor;
+        this.addObstacle();
+    },
+    addObstacle: function() {
+        var obstacle = {};
+        obstacle.x = gameUtils.canvas.width;
+        obstacle.y = Math.floor(Math.random() * (gameUtils.canvas.height - this.obstacles.height));
+        this.gameData.obstacles.obstacleList.push(obstacle);
+    },
+    play: function() {
+        if(this.gameState === "pause" || this.gameState === "stop") {
+            window.requestAnimationFrame(this.draw, this.canvas); 
+            this.gameState = "play";
         }
-    } else {
-        ascentRate = initialAscentRate;
-        chopperY = chopperY + descentRate;
-    
-        if(!(descentRate > terminalVelocity)) {
-            descentRate += gravity;
+    },
+    pause: function() {
+        if(this.gameState === "play") {
+            this.gameState = "pause";
+            socket.emit('gameStopped');
         }
-    }
+    },
+    stop: function() {
+        this.gameState = "stop";
+        socket.emit('gameStopped');
+    },
+    draw: function() {
+        if(copterGame.gameState === "play") {
+            copterGame.moveBackground();
+            copterGame.moveCopter();
+            copterGame.moveBricks();
 
-    // border detection
-    if( (chopperY < 0) || (chopperY > (canvas.height-chopperHeight)) ) {
-        gameOver()
-        socket.emit('gameOver')
-    }
+            copterGame.drawContext.font = gameUtils.font;
+            copterGame.drawContext.fillStyle = gameUtils.textColor;
+            copterGame.drawContext.fillText('Press spacebar to play/pause', 10, 340); 
+            copterGame.drawContext.fillText('Score:' + copterGame.gameData.score, 600, 340); 
 
-    ctx.drawImage(chopper, chopperX, chopperY, chopperWidth, chopperHeight);
-    addSmokeTrail();
-    animateSmoke();
-}
+            copterGame.checkForImpact();
+            window.requestAnimationFrame(copterGame.draw, copterGame.canvas);
+        }
+    },
+    moveBackground: function(){
+        var scrollVal = this.gameData.background.scrollVal;
+        if(scrollVal >= gameUtils.canvas.width) {
+            scrollVal = 0;
+        }
+        this.gameData.background.scrollVal += this.gameData.background.velocity;
+        this.drawContext.drawImage(copterGame.background, -scrollVal, 0, gameUtils.canvas.width, gameUtils.canvas.height)
+        this.drawContext.drawImage(copterGame.background, this.canvas.width-scrollVal, 0, gameUtils.canvas.width, gameUtils.canvas.height)
+    },
 
-function animateBricks() {
-    iterationCount++;
-    for(var i=0; i<brickList.length; i++) {
-        if(brickList[i].x < 0-brickWidth) {
-            brickList.splice(i, 1); // remove the brick that's outside the canvas
-        } 
-        else {
-            brickList[i].x = brickList[i].x - brickV
-            ctx.fillStyle = brickColor
-            ctx.fillRect(brickList[i].x, brickList[i].y, brickWidth, brickHeight)
-            
-            // If enough distance (based on brickInterval) has elapsed since 
-            // the last brick was created, create another one
-            if(iterationCount >= brickInterval) {
-                addBrick();
-                iterationCount = 0;
-                score=score+10;
+    moveCopter: function(){
+        if(this.mouseDown) {
+            this.gameData.copter.descentRate = this.speedSettings.initialDescentRate;
+            this.gameData.copter.y -= this.gameData.copter.ascentRate;
+            if(this.gameData.copter.ascentRate <= this.speedSettings.terminalVelocity) {
+                this.gameData.copter.ascentRate += this.speedSettings.climbRate;
+            }
+        } else {
+            this.gameData.copter.ascentRate = this.speedSettings.initialAscentRate;
+            this.gameData.copter.y += this.gameData.copter.descentRate;
+            if(this.gameData.copter.descentRate <= this.speedSettings.terminalVelocity) {
+                this.gameData.copter.descentRate += this.speedSettings.gravity;
+            }
+        }
+        //check for ceiling and floor collision
+        if(this.gameData.copter.y < 0 || this.gameData.copter.y > (gameUtils.canvas.height - this.copterSettings.height)) {
+            this.gameOver();
+            socket.emit('gameOver');
+        }
+
+        this.drawContext.drawImage(this.copter, this.gameData.copter.x, this.gameData.copter.y, this.copterSettings.width, this.copterSettings.height);
+
+        this.addSmokeTrail();
+        this.animateSmoke();
+    },
+    moveBricks: function(){
+        var obstaclesList = this.gameData.obstacles.obstacleList;
+        this.gameData.obstacles.count++;
+        for(var i = 0; i < obstaclesList.length; i++) {
+            if(obstaclesList[i].x < 0-this.obstacles.width) obstaclesList.splice(i, 1);
+            else {
+                obstaclesList[i].x -= this.obstacles.velocity;
+                this.drawContext.fillStyle = this.obstacles.color;
+                this.drawContext.fillRect(obstaclesList[i].x, obstaclesList[i].y, this.obstacles.width, this.obstacles.height);
+                if(this.gameData.obstacles.count >= this.obstacles.separation) {
+                    this.addObstacle();
+                    this.gameData.obstacles.count = 0;
+                    this.gameData.score += 10;
+                }
+            }
+        }
+    },
+    checkForImpact: function(){
+        var obstaclesList = this.gameData.obstacles.obstacleList;
+        for(var i = 0; i < obstaclesList.length; i++) {
+            if(this.gameData.copter.x < (obstaclesList[i].x + this.obstacles.width) 
+                && (this.gameData.copter.x + this.copterSettings.width) > obstaclesList[i].x 
+                && this.gameData.copter.y < (obstaclesList[i].y + this.obstacles.height) 
+                && (this.gameData.copter.y + this.copterSettings.height) > obstaclesList[i].y) {
+                this.gameOver();
+                socket.emit('gameOver');
+            }
+        }
+    },
+    gameOver: function(){
+        this.gameState = "stop";
+        socket.emit('gameStopped');
+    },
+    addSmokeTrail: function(){
+        var particle = {};
+        particle.x = this.gameData.copter.x;
+        particle.y = this.gameData.copter.y + 4;
+        this.gameData.copter.smokeList.push(particle);
+    },
+    animateSmoke: function(){
+        var smokeList = this.gameData.copter.smokeList;
+        for(var i = 0; i < smokeList.length; i++) {
+            if(smokeList[i].x < 0) smokeList.splice(i,1);
+            else {
+                smokeList[i].x -= this.obstacles.velocity;
+                this.drawContext.fillStyle = gameUtils.smokeColor;
+                this.drawContext.fillRect(smokeList[i].x, smokeList[i].y, 2, 2)
             }
         }
     }
 }
 
-function animateSmoke() {
-    for(var i=0; i<smokeList.length; i++) {
-        if(smokeList[i].x < 0) {
-            smokeList.splice(i, 1); // remove the smoke particle that outside the canvas
-        }
-        else {
-            smokeList[i].x = smokeList[i].x - brickV
-            ctx.fillStyle = smokeColor
-            ctx.fillRect(smokeList[i].x, smokeList[i].y, 2, 2)
-        }
-    }
-}
-
-function animateBackground() {
-    if(scrollVal >= canvas.width){
-        scrollVal = 0;
-    }
-    scrollVal+=backgroundV;       
-    ctx.drawImage(background, -scrollVal, 0, backgroundWidth, backgroundHeight);
-    ctx.drawImage(background, canvas.width-scrollVal, 0, backgroundWidth, backgroundHeight);
-}
-
-function collisionCheck() {
-    for(var i=0; i<brickList.length; i++) {
-        if (chopperX < (brickList[i].x + brickWidth) && (chopperX + chopperWidth) > brickList[i].x
-                    && chopperY < (brickList[i].y + brickHeight) && (chopperY + chopperHeight) > brickList[i].y ) {
-            gameOver()
-            socket.emit('gameOver')
-        }
-    }
-}
-
-function gameOver() {
-    stop();
-}
-
-function addBrick() {
-    newBrick = {}
-    newBrick.x = canvas.width;
-    newBrick.y = Math.floor(Math.random() * (canvas.height-brickHeight))
-    brickList.push(newBrick);
-}
-
-function addSmokeTrail() {
-    newParticle = {}
-    newParticle.x = chopperX
-    newParticle.y = chopperY + 4
-    smokeList.push(newParticle);
-}
-
-function clearScreen() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
+/* HOST INPUT EVENTS that trigger start or pause game */
 document.body.onclick = function(event) {
-    if (event.target.id == "start" && gameState == "stop") {
+    if (event.target.id == "start" && copterGame.gameState == "stop") {
         socket.emit('startGame');
-        setup()
-        play();
-    }    
-    else if (event.target.id === 'click-btn' && gameState == "play") {
-        console.log('play')
-        socket.emit('click')
-    }            
+        copterGame.setup()
+        copterGame.play();
+    }               
 }
-
 document.body.onkeypress = function(e) {
     if(e.keyCode == 32) { // spacebar
-        if(gameState == "pause") {
-            play()
+        if(copterGame.gameState == "pause") {
+            copterGame.play()
             socket.emit('startGame')
         } else {
-            pause()
+            copterGame.pause()
             socket.emit("pauseGame")
         }
     }
     if(e.keyCode == 114) {
-        if(gameState != "play") {
+        if(copterGame.gameState != "play") {
             socket.emit('gameOver')
-            setup();
+            copterGame.setup();
         }
     }
 }
 
+/* PLAYER INPUT/SOCKET EVENTS */
+$(function(){
+  $( "a.button" ).bind( "tap", tapHandler );
+});
 
-/**
- * Provides requestAnimationFrame in a cross browser way.
- * @author paulirish / http://paulirish.com/
- * https://gist.github.com/mrdoob/838785
- */
-if ( !window.requestAnimationFrame ) {
-    window.requestAnimationFrame = ( function() {
-        return window.webkitRequestAnimationFrame ||
-        window.mozRequestAnimationFrame ||
-        window.oRequestAnimationFrame ||
-        window.msRequestAnimationFrame ||
-        function(callback, element ) {
-            window.setTimeout( callback, 1000/60 );
-        };
-    } )();
+function tapHandler( event ){
+    socket.emit('click')
 }
+
+socket.on('startGameEverywhere', function() {
+    copterGame.gameState = "play";
+})
+
+socket.on('clicking', function() {
+    copterGame.mouseDown = true;
+    setTimeout(copterGame.resetMouseDown, 100)
+})
+
+socket.on('endGameEverywhere', function() {
+    copterGame.gameState = "stop";
+})
+
+socket.on('connectionEvent', function(numPlayers) {
+    var player = "player";
+    if(numPlayers > 1)  {
+        player = "players"
+    }
+    if(numPlayers > 0) $('#num-players span').text(numPlayers + " " + player + ' connected')
+    else $('#num-players span').text('Waiting for players to connect')   
+})
+
+/* PRELOAD IMAGE ASSETS */
+function loadImages() {
+    var images = [gameUtils.canvas.backgroundSrc, gameUtils.canvas.copterSrc];
+    var loadedImages = [];
+    var numImages = 2;
+    // get num of sources
+    for(var i = 0; i < images.length; i++) {
+        var image = new Image();
+        loadedImages.push(image);
+        image.onload = function() {
+            if(++loadedImages.length >= numImages) {
+              copterGame.setup();
+            }
+        };
+        image.src = images[i];
+    }
+}
+window.onload = function() {loadImages();}
