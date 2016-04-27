@@ -26,7 +26,6 @@ var copterGame = {
         height: 30,
         width: 25,
         color: "rgb(255,5,5)"
-
     },
     copterSettings: {
         height: 26,
@@ -56,7 +55,6 @@ var copterGame = {
     canvas: document.getElementById('canvas'),
     drawContext: this.canvas.getContext('2d'),
     mouseDown: false,
-
     resetMouseDown: function() {
         copterGame.mouseDown = false;
     },
@@ -151,7 +149,6 @@ var copterGame = {
         }
 
         this.drawContext.drawImage(this.copter, this.gameData.copter.x, this.gameData.copter.y, this.copterSettings.width, this.copterSettings.height);
-
         this.addSmokeTrail();
         this.animateSmoke();
     },
@@ -262,13 +259,12 @@ socket.on('connectionEvent', function(numPlayers) {
 function loadImages() {
     var images = [gameUtils.canvas.backgroundSrc, gameUtils.canvas.copterSrc];
     var loadedImages = [];
-    var numImages = 2;
-    // get num of sources
+
     for(var i = 0; i < images.length; i++) {
         var image = new Image();
         loadedImages.push(image);
         image.onload = function() {
-            if(++loadedImages.length >= numImages) {
+            if(++loadedImages.length >= images.length) {
               copterGame.setup();
             }
         };
